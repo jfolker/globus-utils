@@ -1,5 +1,11 @@
 #!/usr/bin/python3
 
+#
+# This script is a custom identity mapping from Globus GCSv5 user identities
+# to LDAP identities.
+# Author: Jory Folker
+#
+
 from enum import Enum
 import argparse, sys, json, ldap3
 
@@ -39,12 +45,14 @@ argparser.add_argument('--no-ssl', action='store_true',
                        help='If set, connect to LDAP unencrypted.')
 argparser.add_argument('--admin-dn',
                        help='The DN of the LDAP administrator.')
+argparser.add_argument('--search-base',
+                       help='The search base for LDAP entries.', default='dc=people,dc=ls-cat,dc=org')
 argparser.add_argument('--password-file',
-                       help='Plaintext LDAP password file')
+                       help='Plaintext LDAP password file. WARNING: Remember to set 0600 permissions on this file.')
 argparser.add_argument('--host', default='localhost',
-                       help='Hostname of the LDAP server')
+                       help='Hostname of the LDAP server.')
 argparser.add_argument('--port', type=int, default=389,
-                       help='Port number of the LDAP server')
+                       help='Port number of the LDAP server.')
 args = argparser.parse_args()
 
 connectorType = connectorIds.get(args.c, '*unknown*')
@@ -70,10 +78,10 @@ ldapPassword = ''
 with open(args.password_file, 'r') as fileHandle:
     ldapPassword = fileHandle.readlines()[0].replace('\n', '')
 
-# TODO: Make this more useful, e
+using_ssl = not args.no_ssl
 ldapServer = ldap3.Server(host=args.host,
                           port=args.port,
-                          use_ssl=False, get_info='ALL')
+                          use_ssl=using_ssl, get_info='ALL')
 ldapConnection = ldap3.Connection(ldapServer, user=args.admin_dn,
                                   password=ldapPassword)
 ldapConnection.open()
@@ -88,7 +96,7 @@ if not ldapConnection.bound:
 #
 matches = []
 for identity in jsonObj.get('identities', None):
-    ldapConnection.search('dc=people,dc=ls-cat,dc=org',
+    ldapConnection.search(args.search_base,
                           ('(mail=%s)' % identity['email']),
                           attributes=['uid'])
     searchResult = ldapConnection.response
